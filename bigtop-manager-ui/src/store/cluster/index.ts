@@ -17,33 +17,53 @@
  * under the License.
  */
 
-import { computed, ref, watch } from 'vue'
-import { defineStore } from 'pinia'
-import { useRoute } from 'vue-router'
 import { getCluster, getClusterList } from '@/api/cluster'
 import { useServiceStore } from '@/store/service'
-import { useInstalledStore } from '@/store/installed'
+
 import type { ClusterVO } from '@/api/cluster/types.ts'
 
 export const useClusterStore = defineStore(
   'cluster',
   () => {
-    const route = useRoute()
-    const installedStore = useInstalledStore()
     const serviceStore = useServiceStore()
-    const clusters = ref<ClusterVO[]>([])
     const loading = ref(false)
+    const clusters = ref<ClusterVO[]>([])
     const currCluster = ref<ClusterVO>({})
-    const clusterId = computed(() => (route.params.id as string) || undefined)
+    const clusterMap = ref<Record<string, ClusterVO>>({})
+    const clusterCount = computed(() => Object.values(clusterMap.value).length)
 
-    watch(
-      () => clusters.value,
-      (val) => {
-        val.forEach((cluster) => {
-          installedStore.setInstalledMapKey(`${cluster.id}`)
-        })
+    const loadClusters = async () => {
+      try {
+        const clusterList = await getClusterList()
+        clusterMap.value = clusterList.reduce(
+          (pre, cluster) => {
+            pre[cluster.id!] = cluster
+            return pre
+          },
+          {} as Record<string, ClusterVO>
+        )
+      } catch (error) {
+        clusterMap.value = {}
+        console.error('Failed to get clusters:', error)
       }
-    )
+    }
+
+    const getClusterDetail = async (clusterId: number) => {
+      if (clusterId == undefined) {
+        currCluster.value = {}
+        return
+      }
+      try {
+        loading.value = true
+        currCluster.value = await getCluster(clusterId)
+        await serviceStore.getServices(clusterId)
+      } catch (error) {
+        currCluster.value = {}
+        console.error('Failed to get cluster detail:', error)
+      } finally {
+        loading.value = false
+      }
+    }
 
     const addCluster = async () => {
       await loadClusters()
@@ -53,41 +73,22 @@ export const useClusterStore = defineStore(
       await loadClusters()
     }
 
-    const getClusterDetail = async () => {
-      if (clusterId.value == undefined) {
-        return
-      }
-      try {
-        loading.value = true
-        currCluster.value = await getCluster(parseInt(clusterId.value))
-        currCluster.value.id != undefined && (await serviceStore.getServices(currCluster.value.id))
-      } catch (error) {
-        currCluster.value = {}
-        clusters.value = []
-        console.log('error :>> ', error)
-      } finally {
-        loading.value = false
-      }
-    }
-
-    const loadClusters = async () => {
-      clusters.value = await getClusterList()
-    }
-
     return {
       clusters,
+      clusterMap,
       loading,
       currCluster,
-      addCluster,
-      delCluster,
+      clusterCount,
       loadClusters,
-      getClusterDetail
+      getClusterDetail,
+      addCluster,
+      delCluster
     }
   },
   {
     persist: {
       storage: sessionStorage,
-      paths: ['clusters']
+      paths: ['clusterMap']
     }
   }
 )

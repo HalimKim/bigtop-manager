@@ -18,17 +18,15 @@
 -->
 
 <script setup lang="ts">
-  import { computed, onActivated, shallowRef, toRefs, useAttrs } from 'vue'
   import { usePngImage } from '@/utils/tools'
-  import { useI18n } from 'vue-i18n'
   import { CommonStatus, CommonStatusTexts } from '@/enums/state'
   import { useServiceStore } from '@/store/service'
-  import { useRouter } from 'vue-router'
   import { useJobProgress } from '@/store/job-progress'
   import { Empty } from 'ant-design-vue'
+
   import type { ServiceListParams, ServiceStatusType, ServiceVO } from '@/api/service/types'
   import type { GroupItem } from '@/components/common/button-group/types'
-  import type { FilterFormItem } from '@/components/common/filter-form/types'
+  import type { FilterFormItem } from '@/components/common/form-filter/types'
   import type { Command, CommandRequest } from '@/api/command/types'
 
   type GroupItemActionType = keyof typeof Command | 'More'
@@ -91,7 +89,7 @@
     },
     {
       action: 'More',
-      icon: 'more_line',
+      icon: 'more-line',
       clickEvent: (item, args) => {
         infraAction(item!.action!, args)
       }
@@ -106,7 +104,7 @@
         commandLevel: 'service',
         serviceCommands: [{ serviceName: service.name, installed: true }]
       } as CommandRequest
-      jobProgressStore.processCommand(execCommandParams, getServices)
+      jobProgressStore.processCommand(execCommandParams, getServices, { displayName: service.displayName })
     }
   }
 
@@ -119,8 +117,6 @@
       name: 'InfraServiceDetail',
       params: {
         id: clusterInfo.id,
-        service: payload.name,
-        cluster: clusterInfo.name,
         serviceId: payload.id
       }
     })
@@ -134,7 +130,7 @@
 <template>
   <a-spin :spinning="loading" class="service">
     <div class="infra-body">
-      <filter-form :filter-items="filterFormItems" @filter="getServices" />
+      <form-filter :filter-items="filterFormItems" @filter="getServices" />
       <a-empty v-if="services.length == 0" style="width: 100%" :image="Empty.PRESENTED_IMAGE_SIMPLE" />
       <div v-else class="service-item-wrp">
         <a-card
@@ -155,15 +151,15 @@
                 <a-tag :color="CommonStatus[statusColors[item.status]]">
                   <div class="header-base-status-inner">
                     <status-dot :color="CommonStatus[statusColors[item.status]]" />
-                    <span class="small">{{ $t(`common.${statusColors[item.status]}`) }}</span>
+                    <span class="small">{{ t(`common.${statusColors[item.status]}`) }}</span>
                   </div>
                 </a-tag>
               </div>
             </div>
             <div class="header-restart-status">
-              <span class="small-gray">{{ `${$t('common.restart')}` }}</span>
-              <status-dot :color="CommonStatus[statusColors[item.status]]" />
-              <span class="small">{{ `${item.restartFlag ? $t('common.required') : $t('common.not_required')}` }}</span>
+              <span class="small-gray">{{ `${t('common.restart')}` }}</span>
+              <status-dot :color="item.restartFlag ? 'error' : 'success'" />
+              <span class="small">{{ `${item.restartFlag ? t('common.required') : t('common.not_required')}` }}</span>
             </div>
           </div>
           <div class="item-content" @click.stop>

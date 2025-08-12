@@ -40,6 +40,17 @@ import static org.apache.bigtop.manager.common.constants.Constants.ROOT_USER;
 public class LinuxOSUtils {
 
     /**
+     * Execute command with root user
+     *
+     * @param command command
+     * @return result of execute command
+     * @throws IOException errors
+     */
+    public static ShellResult sudoExecCmd(String command) throws IOException {
+        return sudoExecCmd(command, null);
+    }
+
+    /**
      * Execute the sudo command
      *
      * @param command command
@@ -76,6 +87,7 @@ public class LinuxOSUtils {
         builderParameters.add("sh");
         builderParameters.add("-c");
         builderParameters.add(command);
+        log.info("Running command: [{}], user: [{}]", command, tenant);
         return ShellExecutor.execCommand(builderParameters);
     }
 

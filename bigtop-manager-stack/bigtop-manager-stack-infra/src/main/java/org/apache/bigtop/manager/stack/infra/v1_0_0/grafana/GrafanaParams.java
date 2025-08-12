@@ -19,6 +19,7 @@
 package org.apache.bigtop.manager.stack.infra.v1_0_0.grafana;
 
 import org.apache.bigtop.manager.grpc.payload.ComponentCommandPayload;
+import org.apache.bigtop.manager.grpc.pojo.RepoInfo;
 import org.apache.bigtop.manager.stack.core.annotations.GlobalParams;
 import org.apache.bigtop.manager.stack.core.spi.param.Params;
 import org.apache.bigtop.manager.stack.core.utils.LocalSettings;
@@ -57,6 +58,16 @@ public class GrafanaParams extends InfraParams {
 
     public GrafanaParams(ComponentCommandPayload componentCommandPayload) {
         super(componentCommandPayload);
+
+        globalParamsMap.put("grafana_user", user());
+        globalParamsMap.put("grafana_group", group());
+        globalParamsMap.put("grafana_home", serviceHome());
+    }
+
+    @Override
+    public void initGlobalParams() {
+        super.initGlobalParams();
+
         globalParamsMap.put("port", grafanaPort);
         globalParamsMap.put("log_level", grafanaLogLevel);
         globalParamsMap.put("provisioning_path", provisioningDir());
@@ -110,11 +121,11 @@ public class GrafanaParams extends InfraParams {
         }
         prometheusServer = prometheusServers.get(0);
 
-        Map<String, Object> prometheus_configuration = LocalSettings.configurations("prometheus", "prometheus");
-        if (prometheus_configuration == null) {
+        Map<String, Object> prometheusConf = LocalSettings.configurations("prometheus", "prometheus");
+        if (prometheusConf == null) {
             return configuration;
         }
-        prometheusPort = (String) prometheus_configuration.get("port");
+        prometheusPort = (String) prometheusConf.get("port");
         return configuration;
     }
 
@@ -126,11 +137,6 @@ public class GrafanaParams extends InfraParams {
         bmAgentHostDashboardConfig = (String) configuration.get("bm_agent_host_dashboard");
         prometheusDashboardPath = MessageFormat.format("{0}/prometheus", dashboardsDir());
         return configuration;
-    }
-
-    @Override
-    public String getServiceName() {
-        return "grafana";
     }
 
     public List<String> getClusters() {
@@ -170,5 +176,15 @@ public class GrafanaParams extends InfraParams {
             globalParamsMap.put("default_cluster_name", defaultCluster);
             globalParamsMap.put("default_host_name", defaultHost);
         }
+    }
+
+    @Override
+    public RepoInfo repo() {
+        return LocalSettings.repo("grafana");
+    }
+
+    @Override
+    public String getServiceName() {
+        return "grafana";
     }
 }

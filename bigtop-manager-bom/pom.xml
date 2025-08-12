@@ -31,6 +31,7 @@
     <description>Bigtop Manager Bom</description>
 
     <properties>
+        <spring-ai.version>1.0.0-RC1</spring-ai.version>
         <spring-boot.version>3.1.1</spring-boot.version>
         <springdoc.version>2.2.0</springdoc.version>
         <freemarker.version>2.3.32</freemarker.version>
@@ -45,14 +46,18 @@
         <janino.version>3.0.16</janino.version>
         <jaxb-runtime.version>4.0.4</jaxb-runtime.version>
         <commons-text.version>1.11.0</commons-text.version>
+        <password4j.version>1.8.3</password4j.version>
         <prometheus-java-client.version>1.0.0</prometheus-java-client.version>
         <oshi-core.version>6.4.11</oshi-core.version>
         <micrometer.version>1.12.4</micrometer.version>
         <jdbc.dm.version>8.1.2.192</jdbc.dm.version>
-        <sshd.version>2.14.0</sshd.version>
-        <langchain4j.version>0.35.0</langchain4j.version>
+        <sshd.version>2.15.0</sshd.version>
+        <langchain4j-core.version>1.0.1</langchain4j-core.version>
+        <langchain4j.version>1.0.1-beta6</langchain4j.version>
         <mybatis-spring-boot-starter.version>3.0.3</mybatis-spring-boot-starter.version>
         <pagehelper-spring-boot-starter.version>2.1.0</pagehelper-spring-boot-starter.version>
+        <victools.version>4.29.0</victools.version>
+        <arrow.version>18.3.0</arrow.version>
     </properties>
 
     <dependencyManagement>
@@ -161,6 +166,12 @@
                 <version>${commons-text.version}</version>
             </dependency>
 
+            <dependency>
+                <groupId>com.password4j</groupId>
+                <artifactId>password4j</artifactId>
+                <version>${password4j.version}</version>
+            </dependency>
+
             <!-- prometheus java client -->
             <dependency>
                 <groupId>io.prometheus</groupId>
@@ -212,22 +223,18 @@
                 <version>${pagehelper-spring-boot-starter.version}</version>
             </dependency>
 
-            <!-- dameng -->
             <dependency>
-                <groupId>com.dameng</groupId>
-                <artifactId>DmJdbcDriver18</artifactId>
-                <version>${jdbc.dm.version}</version>
-                <scope>provided</scope>
-            </dependency>
-
-            <dependency>
-                <groupId>com.dameng</groupId>
-                <artifactId>DmDialect-for-hibernate6.1</artifactId>
-                <version>${jdbc.dm.version}</version>
-                <scope>provided</scope>
+                <groupId>org.apache.arrow</groupId>
+                <artifactId>flight-sql-jdbc-driver</artifactId>
+                <version>${arrow.version}</version>
             </dependency>
 
             <!-- gRPC -->
+            <dependency>
+                <groupId>io.grpc</groupId>
+                <artifactId>grpc-netty</artifactId>
+                <version>${grpc.version}</version>
+            </dependency>
             <dependency>
                 <groupId>io.grpc</groupId>
                 <artifactId>grpc-stub</artifactId>
@@ -256,23 +263,37 @@
             <dependency>
                 <groupId>dev.langchain4j</groupId>
                 <artifactId>langchain4j</artifactId>
-                <version>${langchain4j.version}</version>
+                <version>${langchain4j-core.version}</version>
             </dependency>
             <dependency>
                 <groupId>dev.langchain4j</groupId>
                 <artifactId>langchain4j-open-ai</artifactId>
-                <version>${langchain4j.version}</version>
+                <version>${langchain4j-core.version}</version>
             </dependency>
             <dependency>
                 <groupId>dev.langchain4j</groupId>
-                <artifactId>langchain4j-qianfan</artifactId>
+                <artifactId>langchain4j-community-qianfan</artifactId>
                 <version>${langchain4j.version}</version>
             </dependency>
+
+            <dependency>
+                <groupId>org.springframework.ai</groupId>
+                <artifactId>spring-ai-starter-mcp-server-webmvc</artifactId>
+                <version>${spring-ai.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.github.victools</groupId>
+                <artifactId>jsonschema-module-jackson</artifactId>
+                <version>${victools.version}</version>
+            </dependency>
+
             <dependency>
                 <groupId>dev.langchain4j</groupId>
-                <artifactId>langchain4j-dashscope</artifactId>
+                <artifactId>langchain4j-community-dashscope</artifactId>
                 <version>${langchain4j.version}</version>
             </dependency>
+
             <dependency>
                 <groupId>dev.langchain4j</groupId>
                 <artifactId>langchain4j-reactor</artifactId>

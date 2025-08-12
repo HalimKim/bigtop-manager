@@ -18,24 +18,27 @@
  */
 
 import { getStacks } from '@/api/stack'
-import { defineStore } from 'pinia'
-import { shallowRef } from 'vue'
 import type { ComponentVO } from '@/api/component/types'
 import type { ServiceConfig, ServiceVO } from '@/api/service/types'
 import type { StackVO } from '@/api/stack/types'
 
 export type ExpandServiceVO = ServiceVO & { order: number }
+export type ServiceMap = {
+  displayName: string
+  stack: string
+  components: string[]
+  configs: ServiceConfig
+  requiredServices: string[]
+}
+
+export type ComponentMap = {
+  service: string
+  stack: string
+} & ComponentVO
+
 export interface StackRelationMap {
-  services: {
-    displayName: string
-    stack: string
-    components: string[]
-    configs: ServiceConfig
-  }
-  components: {
-    service: string
-    stack: string
-  } & ComponentVO
+  services: ServiceMap
+  components: ComponentMap
 }
 
 export const useStackStore = defineStore(
@@ -44,26 +47,38 @@ export const useStackStore = defineStore(
     const stacks = shallowRef<StackVO[]>([])
     const stackRelationMap = shallowRef<StackRelationMap>()
 
-    const loadStacks = async () => {
+    const loadStacks = async (): Promise<void> => {
       try {
-        stacks.value = await getStacks()
-        stackRelationMap.value = setupStackRelationMap(stacks.value)
+        const fetchedStacks = await getStacks()
+        stacks.value = fetchedStacks
+        stackRelationMap.value = setupStackRelationMap(fetchedStacks)
       } catch (error) {
-        console.log('error :>> ', error)
+        console.error('Error loading stacks:', error)
       }
     }
 
-    const setupStackRelationMap = (stacks: StackVO[]) => {
+    /**
+     * Set up the relation map for services and components based on stack data.
+     * @param stacks - Array of stack data.
+     * @returns A relation map containing services and components.
+     */
+    const setupStackRelationMap = (stacks: StackVO[]): StackRelationMap => {
       const relationMap = { services: {}, components: {} } as StackRelationMap
+
       for (const { stackName, services } of stacks) {
         for (const service of services) {
           const { name, displayName, components, configs } = service
+
+          // Map service data
           relationMap.services[name!] = {
             displayName,
             stack: stackName,
             components: components!.map(({ name }) => name),
-            configs
+            configs,
+            requiredServices: service.requiredServices
           }
+
+          // Map component data
           for (const component of components!) {
             relationMap.components[component.name!] = {
               ...component,
@@ -78,6 +93,7 @@ export const useStackStore = defineStore(
 
     const getServicesByExclude = (exclude?: string[], isOrder = true): ExpandServiceVO[] | ServiceVO[] => {
       const filterData = stacks.value.flatMap((stack) => (exclude?.includes(stack.stackName) ? [] : stack.services))
+
       return isOrder ? filterData.map((service, index) => ({ ...service, order: index })) : filterData
     }
 
@@ -90,7 +106,8 @@ export const useStackStore = defineStore(
   },
   {
     persist: {
-      storage: sessionStorage
+      storage: localStorage,
+      paths: ['stacks', 'stackRelationMap']
     }
   }
 )

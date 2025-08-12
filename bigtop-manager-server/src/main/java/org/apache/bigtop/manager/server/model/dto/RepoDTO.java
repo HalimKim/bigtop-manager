@@ -35,5 +35,9 @@ public class RepoDTO {
 
     private String baseUrl;
 
+    private String pkgName;
+
+    private String checksum;
+
     private Integer type;
 }

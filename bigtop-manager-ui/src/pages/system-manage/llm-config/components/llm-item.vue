@@ -18,11 +18,9 @@
 -->
 
 <script setup lang="ts">
-  import { computed, shallowRef, toRefs } from 'vue'
   import {
     AuthPlatformStatus,
     LlmLogo,
-    type LlmLogoFlag,
     type AuthorizedPlatform,
     type AuthorizedPlatformDesc,
     type AuthPlatformStatusType
@@ -75,6 +73,7 @@
     llmConfig: () => ({})
   })
 
+  const { t } = useI18n()
   const emits = defineEmits<Emits>()
   const { llmConfig, isConfig, loading } = toRefs(props)
 
@@ -162,7 +161,7 @@
     emits('createLlmConfig')
   }
 
-  const handleClickAction = ({ key }: { key: ActionKeys }) => {
+  const handleClickAction = ({ key }) => {
     emits('extraActionClick', {
       llmConfig: llmConfig.value as AuthorizedPlatform,
       action: key
@@ -176,19 +175,14 @@
       <a-skeleton active :loading="loading">
         <div class="llm-card-header">
           <div class="llm-card-header-left">
-            <a-image
-              :width="24"
-              :height="24"
-              :preview="false"
-              :src="usePngImage(LlmLogo[llmConfig.platformId as LlmLogoFlag])"
-            />
+            <a-image :width="24" :height="24" :preview="false" :src="usePngImage(LlmLogo[llmConfig.platformId])" />
             <a-typography-text
               class="llm-card-header-left-text"
               :ellipsis="llmConfig?.name ? { tooltip: llmConfig?.name } : false"
               :content="`${llmConfig?.name}`"
             />
             <a-tag :color="llmStatus?.type">
-              {{ $t(llmStatus?.text || '--') }}
+              {{ t(llmStatus?.text || '--') }}
             </a-tag>
           </div>
           <a-dropdown :trigger="['click']">
@@ -204,9 +198,9 @@
                   :key="key"
                   :danger="danger"
                   :disabled="disabled"
-                  :title="$t(label)"
+                  :title="t(label)"
                 >
-                  {{ $t(label) }}
+                  {{ t(label) }}
                 </a-menu-item>
               </a-menu>
             </template>
@@ -214,7 +208,7 @@
         </div>
         <div class="llm-card-body">
           <a-typography-paragraph v-for="{ label, code } in llmDescriptions" :key="code" class="llm-card-desc">
-            <a-typography-text>{{ $t(label) }}</a-typography-text>
+            <a-typography-text>{{ t(label) }}</a-typography-text>
             <a-typography-paragraph
               type="secondary"
               class="llm-card-desc-text"
@@ -227,8 +221,8 @@
     </template>
     <template v-else>
       <div class="llm-card-action" @click="handleCreateLlmConfig">
-        <svg-icon name="plus_dark" />
-        <a-typography-text type="secondary" :content="$t('llmConfig.add_authorization')" />
+        <svg-icon name="plus-dark" />
+        <a-typography-text type="secondary" :content="t('llmConfig.add_authorization')" />
       </div>
     </template>
   </div>

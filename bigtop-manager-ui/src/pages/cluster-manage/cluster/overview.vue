@@ -18,81 +18,57 @@
 -->
 
 <script setup lang="ts">
-  import { computed, onActivated, ref, shallowRef, useAttrs } from 'vue'
-  import { useI18n } from 'vue-i18n'
-  import { storeToRefs } from 'pinia'
   import { formatFromByte } from '@/utils/storage'
   import { usePngImage } from '@/utils/tools'
+
   import { CommonStatus, CommonStatusTexts } from '@/enums/state'
+
   import { useServiceStore } from '@/store/service'
   import { useJobProgress } from '@/store/job-progress'
+  import { useStackStore } from '@/store/stack'
+  import { useClusterStore } from '@/store/cluster'
+
   import { Empty } from 'ant-design-vue'
-  import GaugeChart from './components/gauge-chart.vue'
-  import CategoryChart from './components/category-chart.vue'
+  import { getClusterMetricsInfo } from '@/api/metrics'
+
   import type { ClusterStatusType, ClusterVO } from '@/api/cluster/types'
-  import type { ServiceListParams, ServiceVO } from '@/api/service/types'
-  import type { MenuItem } from '@/store/menu/types'
+  import type { ServiceVO } from '@/api/service/types'
   import type { StackVO } from '@/api/stack/types'
   import type { Command } from '@/api/command/types'
+  import type { MetricsData, TimeRangeType } from '@/api/metrics/types'
 
-  type TimeRangeText = '1m' | '15m' | '30m' | '1h' | '6h' | '30h'
-  type TimeRangeItem = {
-    text: TimeRangeText
-    time: string
-  }
+  const props = defineProps<{ payload: ClusterVO }>()
+  const emits = defineEmits<{ (event: 'update:payload', value: ClusterVO): void }>()
 
   const { t } = useI18n()
-  const attrs = useAttrs() as ClusterVO
+  const route = useRoute()
   const jobProgressStore = useJobProgress()
+  const stackStore = useStackStore()
   const serviceStore = useServiceStore()
-  const currTimeRange = ref<TimeRangeText>('15m')
-  const chartData = ref({
-    chart1: [],
-    chart2: [],
-    chart3: [],
-    chart4: []
-  })
+  const clusterStore = useClusterStore()
+
+  const currTimeRange = ref<TimeRangeType>('5m')
+  const chartData = ref<Partial<MetricsData>>({})
+
+  const timeRanges = shallowRef<TimeRangeType[]>(['1m', '5m', '15m', '30m', '1h', '2h'])
+  const locateStackWithService = shallowRef<StackVO[]>([])
   const statusColors = shallowRef<Record<ClusterStatusType, keyof typeof CommonStatusTexts>>({
     1: 'healthy',
     2: 'unhealthy',
     3: 'unknown'
   })
-  const { locateStackWithService, serviceNames } = storeToRefs(serviceStore)
+
+  const { serviceNames } = storeToRefs(serviceStore)
+  const { payload } = toRefs(props)
 
   const clusterDetail = computed(() => ({
-    ...attrs,
-    totalMemory: formatFromByte(attrs.totalMemory as number),
-    totalDisk: formatFromByte(attrs.totalDisk as number)
+    ...payload.value,
+    totalMemory: formatFromByte(payload.value.totalMemory as number),
+    totalDisk: formatFromByte(payload.value.totalDisk as number)
   }))
-  const noChartData = computed(() => Object.values(chartData.value).every((v) => v.length === 0))
-  const timeRanges = computed((): TimeRangeItem[] => [
-    {
-      text: '1m',
-      time: ''
-    },
-    {
-      text: '15m',
-      time: ''
-    },
-    {
-      text: '30m',
-      time: ''
-    },
-    {
-      text: '1h',
-      time: ''
-    },
-    {
-      text: '6h',
-      time: ''
-    },
-    {
-      text: '30h',
-      time: ''
-    }
-  ])
-  const baseConfig = computed((): Partial<Record<keyof ClusterVO, string>> => {
-    return {
+
+  const baseConfig = computed(
+    (): Partial<Record<keyof ClusterVO, string>> => ({
       status: t('overview.cluster_status'),
       displayName: t('overview.cluster_name'),
       desc: t('overview.cluster_desc'),
@@ -102,58 +78,78 @@
       totalProcessor: t('overview.core_count'),
       totalDisk: t('overview.disk_size'),
       createUser: t('overview.creator')
-    }
-  })
-  const unitOfBaseConfig = computed((): Partial<Record<keyof ClusterVO, string>> => {
-    return {
+    })
+  )
+
+  const unitOfBaseConfig = computed(
+    (): Partial<Record<keyof ClusterVO, string>> => ({
       totalHost: t('overview.unit_host'),
       totalService: t('overview.unit_service'),
       totalProcessor: t('overview.unit_core')
-    }
-  })
-  const detailKeys = computed(() => Object.keys(baseConfig.value) as (keyof ClusterVO)[])
-  const serviceOperates = computed(() => [
-    {
-      action: 'Start',
-      text: t('common.start', [t('common.service')])
-    },
-    {
-      action: 'Restart',
-      text: t('common.restart', [t('common.service')])
-    },
-    {
-      action: 'Stop',
-      text: t('common.stop', [t('common.service')])
-    }
-  ])
+    })
+  )
 
-  const handleServiceOperate = async (item: MenuItem, service: ServiceVO) => {
-    try {
-      await jobProgressStore.processCommand({
+  const serviceOperates = computed(() => ({
+    Start: t('common.start', [t('common.service')]),
+    Restart: t('common.restart', [t('common.service')]),
+    Stop: t('common.stop', [t('common.service')])
+  }))
+
+  const clusterId = computed(() => route.params.id as unknown as number)
+  const noChartData = computed(() => Object.values(chartData.value).length === 0)
+  const detailKeys = computed(() => Object.keys(baseConfig.value) as (keyof ClusterVO)[])
+
+  const handleServiceOperate = (item: any, service: ServiceVO) => {
+    jobProgressStore.processCommand(
+      {
         command: item.key as keyof typeof Command,
-        clusterId: attrs.id,
+        clusterId: clusterId.value,
         commandLevel: 'service',
         serviceCommands: [{ serviceName: service.name!, installed: true }]
-      })
-    } catch (error) {
-      console.log('error :>> ', error)
+      },
+      undefined,
+      {
+        displayName: service.displayName
+      }
+    )
+  }
+
+  const handleTimeRange = (time: TimeRangeType) => {
+    if (currTimeRange.value !== time) {
+      currTimeRange.value = time
+      getClusterMetrics()
     }
-  }
-
-  const handleTimeRange = (time: TimeRangeItem) => {
-    currTimeRange.value = time.text
-  }
-
-  const getServices = (filters?: ServiceListParams) => {
-    attrs.id != undefined && serviceStore.getServices(attrs.id, filters)
   }
 
   const servicesFromCurrentCluster = (stack: StackVO) => {
     return stack.services.filter((v) => serviceNames.value.includes(v.name))
   }
 
-  onActivated(() => {
-    getServices()
+  const getClusterMetrics = async () => {
+    try {
+      chartData.value = await getClusterMetricsInfo({ id: clusterId.value }, { interval: currTimeRange.value })
+    } catch (error) {
+      console.log('Failed to fetch cluster metrics:', error)
+    }
+  }
+
+  const { pause, resume } = useIntervalFn(getClusterMetrics, 30000, { immediate: true })
+
+  onActivated(async () => {
+    await clusterStore.getClusterDetail(clusterId.value)
+    emits('update:payload', clusterStore.currCluster)
+    getClusterMetrics()
+    resume()
+  })
+
+  onDeactivated(() => pause())
+
+  onUnmounted(() => pause())
+
+  watchEffect(() => {
+    locateStackWithService.value = stackStore.stacks.filter((item) =>
+      item.services.some((service) => service.name && serviceNames.value.includes(service.name))
+    )
   })
 </script>
 
@@ -163,14 +159,14 @@
       <a-col :xs="24" :sm="24" :md="24" :lg="10" :xl="7" style="display: flex; flex-direction: column; gap: 24px">
         <div class="base-info">
           <div class="box-title">
-            <a-typography-text strong :content="$t('overview.basic_info')" />
+            <a-typography-text strong :content="t('overview.basic_info')" />
           </div>
           <div>
             <a-descriptions layout="vertical" bordered>
               <a-descriptions-item>
                 <template #label>
                   <div class="desc-sub-label">
-                    <a-typography-text strong :content="$t('overview.detail')" />
+                    <a-typography-text strong :content="t('overview.detail')" />
                   </div>
                 </template>
                 <div class="desc-sub-item-wrp">
@@ -180,7 +176,7 @@
                         <a-typography-text
                           class="desc-sub-item-desc-column"
                           type="secondary"
-                          :content="baseConfig[base]"
+                          :content="baseConfig[base] ?? '--'"
                         />
                         <a-tag
                           v-if="base === 'status'"
@@ -189,8 +185,7 @@
                         >
                           <status-dot :color="CommonStatus[statusColors[clusterDetail[base] as ClusterStatusType]]" />
                           {{
-                            clusterDetail[base] &&
-                            $t(`common.${statusColors[clusterDetail[base] as ClusterStatusType]}`)
+                            clusterDetail[base] && t(`common.${statusColors[clusterDetail[base] as ClusterStatusType]}`)
                           }}
                         </a-tag>
                         <a-typography-text
@@ -198,8 +193,8 @@
                           class="desc-sub-item-desc-column"
                           :content="
                             Object.keys(unitOfBaseConfig).includes(base)
-                              ? `${clusterDetail[base]} ${unitOfBaseConfig[base]}`
-                              : `${clusterDetail[base]}`
+                              ? `${clusterDetail[base] ?? '--'} ${unitOfBaseConfig[base]}`
+                              : `${clusterDetail[base] ?? '--'}`
                           "
                         />
                       </div>
@@ -214,7 +209,7 @@
         <template v-if="locateStackWithService.length == 0">
           <div class="service-info">
             <div class="box-title">
-              <a-typography-text strong :content="$t('overview.service_info')" />
+              <a-typography-text strong :content="t('overview.service_info')" />
             </div>
             <div class="box-empty">
               <a-empty :image="Empty.PRESENTED_IMAGE_SIMPLE" />
@@ -223,7 +218,7 @@
         </template>
         <a-descriptions v-else layout="vertical" bordered :column="1">
           <template #title>
-            <a-typography-text strong :content="$t('overview.service_info')" />
+            <a-typography-text strong :content="t('overview.service_info')" />
           </template>
           <a-descriptions-item v-for="stack in locateStackWithService" :key="stack.stackName">
             <template #label>
@@ -244,8 +239,8 @@
                 </a-button>
                 <template #overlay>
                   <a-menu @click="handleServiceOperate($event, service)">
-                    <a-menu-item v-for="operate in serviceOperates" :key="operate.action">
-                      <span>{{ operate.text }}</span>
+                    <a-menu-item v-for="[operate, text] of Object.entries(serviceOperates)" :key="operate">
+                      <span>{{ text }}</span>
                     </a-menu-item>
                   </a-menu>
                 </template>
@@ -256,44 +251,54 @@
       </a-col>
       <a-col :xs="24" :sm="24" :md="24" :lg="14" :xl="17">
         <div class="box-title">
-          <a-typography-text strong :content="$t('overview.chart')" />
+          <a-typography-text strong :content="t('overview.chart')" />
           <a-space :size="12">
             <div
               v-for="time in timeRanges"
-              :key="time.text"
+              :key="time"
               tabindex="0"
               class="time-range"
-              :class="{ 'time-range-activated': currTimeRange === time.text }"
+              :class="{ 'time-range-activated': currTimeRange === time }"
               @click="handleTimeRange(time)"
             >
-              {{ time.text }}
+              {{ time }}
             </div>
           </a-space>
         </div>
         <template v-if="noChartData">
           <div class="box-empty">
-            <a-empty />
+            <a-empty :image="Empty.PRESENTED_IMAGE_SIMPLE" />
           </div>
         </template>
         <a-row v-else class="box-content">
           <a-col :xs="24" :sm="24" :md="12" :lg="12" :xl="12">
             <div class="chart-item-wrp">
-              <gauge-chart chart-id="chart1" :title="$t('overview.memory_usage')" />
+              <gauge-chart chart-id="chart1" :percent="chartData?.memoryUsageCur" :title="t('overview.memory_usage')" />
             </div>
           </a-col>
           <a-col :xs="24" :sm="24" :md="12" :lg="12" :xl="12">
             <div class="chart-item-wrp">
-              <gauge-chart chart-id="chart2" :title="$t('overview.cpu_usage')" />
+              <gauge-chart chart-id="chart2" :percent="chartData?.cpuUsageCur" :title="t('overview.cpu_usage')" />
             </div>
           </a-col>
           <a-col :xs="24" :sm="24" :md="12" :lg="12" :xl="12">
             <div class="chart-item-wrp">
-              <category-chart chart-id="chart4" :title="$t('overview.cpu_usage')" />
+              <category-chart
+                chart-id="chart3"
+                :x-axis-data="chartData?.timestamps"
+                :data="chartData?.memoryUsage ?? []"
+                :title="t('overview.memory_usage')"
+              />
             </div>
           </a-col>
           <a-col :xs="24" :sm="24" :md="12" :lg="12" :xl="12">
             <div class="chart-item-wrp">
-              <category-chart chart-id="chart3" :title="$t('overview.memory_usage')" />
+              <category-chart
+                chart-id="chart4"
+                :x-axis-data="chartData?.timestamps"
+                :data="chartData?.cpuUsage ?? []"
+                :title="t('overview.cpu_usage')"
+              />
             </div>
           </a-col>
         </a-row>
@@ -319,7 +324,7 @@
 
     &-content {
       border-radius: 8px;
-      overflow: hidden;
+      overflow: visible;
       box-sizing: border-box;
       border: 1px solid $color-border;
     }

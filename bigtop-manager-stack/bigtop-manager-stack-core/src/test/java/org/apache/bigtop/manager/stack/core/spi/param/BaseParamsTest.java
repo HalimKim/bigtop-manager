@@ -37,8 +37,10 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mockStatic;
 
 @ExtendWith(MockitoExtension.class)
@@ -57,9 +59,10 @@ public class BaseParamsTest {
     @BeforeEach
     public void setUp() {
         List<RepoInfo> repos = new ArrayList<>();
-        repos.add(new RepoInfo("repo1", "mockArch", "testURL", 2));
-        repos.add(new RepoInfo("repo2", "mockArch", "testURL", 1));
-        repos.add(new RepoInfo("repo3", "mockArch", "testURL", 1));
+        RepoInfo general = new RepoInfo("general", "mockArch", "testURL", "testPkgName", "testChecksum", 1);
+        RepoInfo test = new RepoInfo("test", "mockArch", "testURL", "testPkgName", "testChecksum", 1);
+        repos.add(general);
+        repos.add(test);
 
         List<String> arch = new ArrayList<>();
         arch.add("mockArch");
@@ -94,6 +97,7 @@ public class BaseParamsTest {
         osDetectionMockedStatic = mockStatic(OSDetection.class);
         netUtilsMockedStatic = mockStatic(NetUtils.class);
         netUtilsMockedStatic.when(NetUtils::getHostname).thenReturn("mockHostname");
+        localSettingsMockedStatic.when(() -> LocalSettings.repo(any())).thenReturn(general);
         localSettingsMockedStatic.when(LocalSettings::repos).thenReturn(repos);
         localSettingsMockedStatic.when(LocalSettings::cluster).thenReturn(clusterInfo);
         osDetectionMockedStatic.when(OSDetection::getArch).thenReturn("mockArch");
@@ -104,6 +108,27 @@ public class BaseParamsTest {
         localSettingsMockedStatic.close();
         osDetectionMockedStatic.close();
         netUtilsMockedStatic.close();
+    }
+
+    @Test
+    public void testInitGlobalParams() {
+        Map<String, Object> globalParamsMap = mockBaseParams.getGlobalParamsMap();
+        globalParamsMap.put("a1", "k1");
+        globalParamsMap.put("a2", "k2");
+        globalParamsMap.put("a3", "k3");
+        globalParamsMap.put("k1_k2", "kk1");
+        globalParamsMap.put("kk1_k3", "value");
+        globalParamsMap.put("key", "${key3}");
+        globalParamsMap.put("key1", "${k1_${a2}}_${a3}");
+        globalParamsMap.put("key2", "${${k1_${a2}}_${a3}}");
+        globalParamsMap.put("key3", "${key1}");
+        globalParamsMap.put("key4", "${not_exists}");
+        mockBaseParams.initGlobalParams();
+        assertEquals("kk1_k3", globalParamsMap.get("key"));
+        assertEquals("kk1_k3", globalParamsMap.get("key1"));
+        assertEquals("value", mockBaseParams.getGlobalParamsMap().get("key2"));
+        assertEquals("kk1_k3", globalParamsMap.get("key3"));
+        assertEquals("${not_exists}", globalParamsMap.get("key4"));
     }
 
     @Test
@@ -133,8 +158,7 @@ public class BaseParamsTest {
     @Test
     public void testRepo() {
         RepoInfo repo = mockBaseParams.repo();
-        assertEquals(1, repo.getType());
-        assertEquals("repo2", repo.getName());
+        assertEquals("general", repo.getName());
         assertEquals("mockArch", repo.getArch());
     }
 
@@ -158,7 +182,7 @@ public class BaseParamsTest {
     @Test
     public void testJavaHome() {
         String javaHome = mockBaseParams.javaHome();
-        assertEquals("/mockRoot/tools/jdk", javaHome);
+        assertEquals("/mockRoot/dependencies/jdk", javaHome);
     }
 
     @Test

@@ -55,7 +55,6 @@ export default {
   desc: '描述',
   os: '系统',
   arch: '架构',
-  base_url: '地址',
   cluster: '集群',
   host: '主机',
   service: '服务',
@@ -100,7 +99,6 @@ export default {
   delete_msgs: '确认要删除这些记录吗？',
   delete_empty: '请选择需要删除的记录',
   total: '共{0}条数据',
-  note: '注: 源地址的改动对所有集群生效。',
   upload_file: '上传文件',
   file_type_error: '只能上传文本文件！',
   file_size_error: '文件大小不能超过 10KB！',
@@ -125,5 +123,8 @@ export default {
   disabled: '关闭',
   restore: '恢复',
   selected: '选中',
-  feature_not_supported: '功能暂不支持'
+  feature_not_supported: '功能暂不支持',
+  installing_exit_confirm_content: '正在安装中，退出页面将导致安装失败。是否确定退出？',
+  confirm_action: '确定要{action} {target} 吗？',
+  confirm_comp_action: '确定要{action}选中的组件吗？'
 }

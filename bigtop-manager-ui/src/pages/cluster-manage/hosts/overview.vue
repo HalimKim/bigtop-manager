@@ -18,83 +18,50 @@
 -->
 
 <script setup lang="ts">
-  import { computed, ref, shallowRef, toRefs, watch } from 'vue'
-  import { useI18n } from 'vue-i18n'
   import { Empty } from 'ant-design-vue'
   import { formatFromByte } from '@/utils/storage.ts'
   import { usePngImage } from '@/utils/tools'
   import { CommonStatus, CommonStatusTexts } from '@/enums/state.ts'
+  import { useServiceStore } from '@/store/service'
   import { useJobProgress } from '@/store/job-progress'
   import { useStackStore } from '@/store/stack'
-  import { useInstalledStore } from '@/store/installed'
   import { getComponentsByHost } from '@/api/hosts'
   import { Command } from '@/api/command/types'
-  import CategoryChart from '@/pages/cluster-manage/cluster/components/category-chart.vue'
-  import GaugeChart from '@/pages/cluster-manage/cluster/components/gauge-chart.vue'
+  import { getHostMetricsInfo } from '@/api/metrics'
+
+  import GaugeChart from '@/features/metric/gauge-chart.vue'
+  import CategoryChart from '@/features/metric/category-chart.vue'
+
   import type { HostStatusType, HostVO } from '@/api/hosts/types.ts'
   import type { ClusterStatusType } from '@/api/cluster/types.ts'
   import type { ComponentVO } from '@/api/component/types.ts'
-  import type { MenuItem } from '@/store/menu/types'
+  import type { MetricsData, TimeRangeType } from '@/api/metrics/types'
 
-  type TimeRangeText = '1m' | '15m' | '30m' | '1h' | '6h' | '30h'
-  type TimeRangeItem = {
-    text: TimeRangeText
-    time: string
-  }
+  type StatusColorType = Record<HostStatusType, keyof typeof CommonStatusTexts>
 
   interface Props {
     hostInfo: HostVO
   }
 
   const props = defineProps<Props>()
-  const { hostInfo } = toRefs(props)
+
   const { t } = useI18n()
   const stackStore = useStackStore()
+  const serviceStore = useServiceStore()
   const jobProgressStore = useJobProgress()
-  const installedStore = useInstalledStore()
-  const currTimeRange = ref<TimeRangeText>('15m')
-  const statusColors = shallowRef<Record<HostStatusType, keyof typeof CommonStatusTexts>>({
-    1: 'healthy',
-    2: 'unhealthy',
-    3: 'unknown'
-  })
-  const chartData = ref({
-    chart1: [],
-    chart2: [],
-    chart3: [],
-    chart4: []
-  })
+
+  const currTimeRange = ref<TimeRangeType>('5m')
+  const chartData = ref<Partial<MetricsData>>({})
+
   const componentsFromCurrentHost = shallowRef<Map<string, ComponentVO[]>>(new Map())
-  const needFormatFormByte = computed(() => ['totalMemorySize', 'totalDisk'])
-  const noChartData = computed(() => Object.values(chartData.value).every((v) => v.length === 0))
-  const timeRanges = computed((): TimeRangeItem[] => [
-    {
-      text: '1m',
-      time: ''
-    },
-    {
-      text: '15m',
-      time: ''
-    },
-    {
-      text: '30m',
-      time: ''
-    },
-    {
-      text: '1h',
-      time: ''
-    },
-    {
-      text: '6h',
-      time: ''
-    },
-    {
-      text: '30h',
-      time: ''
-    }
-  ])
-  const baseConfig = computed((): Partial<Record<keyof HostVO, string>> => {
-    return {
+  const needFormatFormByte = shallowRef(['totalMemorySize', 'totalDisk'])
+  const timeRanges = shallowRef<TimeRangeType[]>(['1m', '5m', '15m', '30m', '1h', '2h'])
+  const statusColors = shallowRef<StatusColorType>({ 1: 'healthy', 2: 'unhealthy', 3: 'unknown' })
+
+  const { hostInfo } = toRefs(props)
+
+  const baseConfig = computed(
+    (): Partial<Record<keyof HostVO, string>> => ({
       status: t('overview.host_status'),
       hostname: t('overview.hostname'),
       desc: t('overview.host_desc'),
@@ -107,54 +74,58 @@
       availableProcessors: t('overview.core_count'),
       totalMemorySize: t('overview.memory'),
       totalDisk: t('overview.disk_size')
-    }
-  })
+    })
+  )
+
   const unitOfBaseConfig = computed(
     (): Partial<Record<keyof HostVO, string>> => ({
       componentNum: t('overview.unit_component'),
       availableProcessors: t('overview.unit_core')
     })
   )
-  const detailKeys = computed((): (keyof HostVO)[] => Object.keys(baseConfig.value))
-  const componentOperates = computed(() => [
-    {
-      action: 'Start',
-      text: t('common.start', [t('common.component')])
-    },
-    {
-      action: 'Restart',
-      text: t('common.restart', [t('common.component')])
-    },
-    {
-      action: 'Stop',
-      text: t('common.stop', [t('common.component')])
-    }
-  ])
 
-  const handleHostOperate = async (item: MenuItem, component: ComponentVO) => {
+  const componentOperates = computed(() => ({
+    Start: t('common.start', [t('common.component')]),
+    Restart: t('common.restart', [t('common.component')]),
+    Stop: t('common.stop', [t('common.component')])
+  }))
+
+  const detailKeys = computed((): (keyof HostVO)[] => Object.keys(baseConfig.value))
+  const noChartData = computed(() => Object.values(chartData.value).length === 0)
+
+  const handleHostOperate = (item: any, component: ComponentVO) => {
     const { serviceName } = component
-    const installedServiceMap = Object.values(installedStore.installedServiceMap)
+    const installedServiceMap = Object.values(serviceStore.serviceMap)
       .flat()
-      .filter((v) => v.serviceName === serviceName)
+      .filter((v) => v.name === serviceName)
     if (installedServiceMap.length > 0) {
-      try {
-        await jobProgressStore.processCommand(
-          {
-            command: item.key as keyof typeof Command,
-            clusterId: installedServiceMap[0].clusterId,
-            commandLevel: 'component',
-            componentCommands: [{ componentName: component.name!, hostnames: [component.hostname!] }]
-          },
-          getComponentInfo
-        )
-      } catch (error) {
-        console.log('error :>> ', error)
-      }
+      jobProgressStore.processCommand(
+        {
+          command: item.key as keyof typeof Command,
+          clusterId: installedServiceMap[0].clusterId,
+          commandLevel: 'component',
+          componentCommands: [{ componentName: component.name!, hostnames: [component.hostname!] }]
+        },
+        getComponentInfo,
+        { displayName: component.displayName }
+      )
     }
   }
 
-  const handleTimeRange = (time: TimeRangeItem) => {
-    currTimeRange.value = time.text
+  const handleTimeRange = (time: TimeRangeType) => {
+    if (currTimeRange.value == time) {
+      return
+    }
+    currTimeRange.value = time
+    getHostMetrics()
+  }
+
+  const getHostMetrics = async () => {
+    try {
+      chartData.value = await getHostMetricsInfo({ id: hostInfo.value.id! }, { interval: currTimeRange.value })
+    } catch (error) {
+      console.log('Failed to fetch host metrics:', error)
+    }
   }
 
   const getComponentInfo = async () => {
@@ -173,14 +144,24 @@
     }
   }
 
+  const { pause, resume } = useIntervalFn(getHostMetrics, 30000, { immediate: true })
+
   watch(
     () => hostInfo.value,
     (val) => {
       if (val.id) {
         getComponentInfo()
+        getHostMetrics()
+        resume()
+      } else {
+        pause()
       }
     }
   )
+
+  onUnmounted(() => {
+    pause()
+  })
 </script>
 
 <template>
@@ -189,14 +170,14 @@
       <a-col :xs="24" :sm="24" :md="24" :lg="10" :xl="7" style="display: flex; flex-direction: column; gap: 24px">
         <div class="base-info">
           <div class="box-title">
-            <a-typography-text strong :content="$t('overview.basic_info')" />
+            <a-typography-text strong :content="t('overview.basic_info')" />
           </div>
           <div>
             <a-descriptions layout="vertical" bordered>
               <a-descriptions-item>
                 <template #label>
                   <div class="desc-sub-label">
-                    <a-typography-text strong :content="$t('overview.detail')" />
+                    <a-typography-text strong :content="t('overview.detail')" />
                   </div>
                 </template>
                 <div class="desc-sub-item-wrp">
@@ -214,7 +195,7 @@
                           :color="CommonStatus[statusColors[hostInfo[base] as ClusterStatusType]]"
                         >
                           <status-dot :color="CommonStatus[statusColors[hostInfo[base] as ClusterStatusType]]" />
-                          {{ hostInfo[base] && $t(`common.${statusColors[hostInfo[base] as ClusterStatusType]}`) }}
+                          {{ hostInfo[base] && t(`common.${statusColors[hostInfo[base] as ClusterStatusType]}`) }}
                         </a-tag>
                         <a-typography-text v-else class="desc-sub-item-desc-column">
                           <span v-if="Object.keys(unitOfBaseConfig).includes(base as string)">
@@ -242,7 +223,7 @@
         <template v-if="componentsFromCurrentHost.size === 0">
           <div class="component-info">
             <div class="box-title">
-              <a-typography-text strong :content="$t('overview.component_info')" />
+              <a-typography-text strong :content="t('overview.component_info')" />
             </div>
             <div class="box-empty">
               <a-empty :image="Empty.PRESENTED_IMAGE_SIMPLE" />
@@ -251,7 +232,7 @@
         </template>
         <a-descriptions v-else layout="vertical" bordered :column="1">
           <template #title>
-            <a-typography-text strong :content="$t('overview.component_info')" />
+            <a-typography-text strong :content="t('overview.component_info')" />
           </template>
           <a-descriptions-item v-for="stack in componentsFromCurrentHost.keys()" :key="stack">
             <template #label>
@@ -272,8 +253,8 @@
                 </a-button>
                 <template #overlay>
                   <a-menu @click="handleHostOperate($event, comp)">
-                    <a-menu-item v-for="operate in componentOperates" :key="operate.action">
-                      <span>{{ operate.text }}</span>
+                    <a-menu-item v-for="[operate, text] of Object.entries(componentOperates)" :key="operate">
+                      <span>{{ text }}</span>
                     </a-menu-item>
                   </a-menu>
                 </template>
@@ -284,44 +265,91 @@
       </a-col>
       <a-col :xs="24" :sm="24" :md="24" :lg="14" :xl="17">
         <div class="box-title">
-          <a-typography-text strong :content="$t('overview.chart')" />
+          <a-typography-text strong :content="t('overview.chart')" />
           <a-space :size="12">
             <div
               v-for="time in timeRanges"
-              :key="time.text"
+              :key="time"
               tabindex="0"
               class="time-range"
-              :class="{ 'time-range-activated': currTimeRange === time.text }"
+              :class="{ 'time-range-activated': currTimeRange === time }"
               @click="handleTimeRange(time)"
             >
-              {{ time.text }}
+              {{ time }}
             </div>
           </a-space>
         </div>
         <template v-if="noChartData">
           <div class="box-empty">
-            <a-empty />
+            <a-empty :image="Empty.PRESENTED_IMAGE_SIMPLE" />
           </div>
         </template>
         <a-row v-else class="box-content">
           <a-col :xs="24" :sm="24" :md="12" :lg="12" :xl="12">
             <div class="chart-item-wrp">
-              <gauge-chart chart-id="chart1" :title="$t('overview.memory_usage')" />
+              <gauge-chart chart-id="chart1" :percent="chartData?.memoryUsageCur" :title="t('overview.memory_usage')" />
             </div>
           </a-col>
           <a-col :xs="24" :sm="24" :md="12" :lg="12" :xl="12">
             <div class="chart-item-wrp">
-              <gauge-chart chart-id="chart2" :title="$t('overview.cpu_usage')" />
+              <gauge-chart chart-id="chart2" :percent="chartData?.cpuUsageCur" :title="t('overview.cpu_usage')" />
             </div>
           </a-col>
           <a-col :xs="24" :sm="24" :md="12" :lg="12" :xl="12">
             <div class="chart-item-wrp">
-              <category-chart chart-id="chart4" :title="$t('overview.cpu_usage')" />
+              <category-chart
+                chart-id="chart3"
+                :x-axis-data="chartData?.timestamps"
+                :data="chartData?.memoryUsage"
+                :title="t('overview.memory_usage')"
+              />
             </div>
           </a-col>
           <a-col :xs="24" :sm="24" :md="12" :lg="12" :xl="12">
             <div class="chart-item-wrp">
-              <category-chart chart-id="chart3" :title="$t('overview.memory_usage')" />
+              <category-chart
+                chart-id="chart4"
+                :x-axis-data="chartData?.timestamps"
+                :data="chartData?.cpuUsage"
+                :title="t('overview.cpu_usage')"
+              />
+            </div>
+          </a-col>
+          <a-col :xs="24" :sm="24" :md="12" :lg="12" :xl="12">
+            <div class="chart-item-wrp">
+              <category-chart
+                chart-id="chart5"
+                :x-axis-data="chartData?.timestamps"
+                :data="chartData"
+                :title="t('overview.system_load')"
+                :formatter="{
+                  tooltip: (val) => `${val == null || val == '' ? '--' : val}`,
+                  yAxis: (val) => `${val}`
+                }"
+                :legend-map="[
+                  ['systemLoad1', 'load1'],
+                  ['systemLoad5', 'load5'],
+                  ['systemLoad15', 'load15']
+                ]"
+              />
+            </div>
+          </a-col>
+          <a-col :xs="24" :sm="24" :md="12" :lg="12" :xl="12">
+            <div class="chart-item-wrp">
+              <category-chart
+                chart-id="chart6"
+                :x-axis-data="chartData?.timestamps"
+                :data="chartData"
+                :title="t('overview.disk_io')"
+                :formatter="{
+                  tooltip: (val) => `${val == null || val == '' ? '--' : formatFromByte(val as number, 0)}`,
+                  yAxis: (val) => formatFromByte(val as number, 0)
+                }"
+                :legend-map="[
+                  ['diskRead', 'read'],
+                  ['diskWrite', 'write']
+                ]"
+              />
             </div>
           </a-col>
         </a-row>
@@ -347,7 +375,7 @@
 
     &-content {
       border-radius: 8px;
-      overflow: hidden;
+      overflow: visible;
       box-sizing: border-box;
       border: 1px solid $color-border;
     }

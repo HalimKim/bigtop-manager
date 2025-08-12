@@ -19,14 +19,13 @@
 
 <script setup lang="ts">
   import { message, Modal, TableColumnType, TableProps } from 'ant-design-vue'
-  import { computed, onActivated, reactive, ref, useAttrs } from 'vue'
-  import { useI18n } from 'vue-i18n'
   import { getHosts } from '@/api/hosts'
   import * as hostApi from '@/api/hosts'
-  import { useRouter } from 'vue-router'
-  import useBaseTable from '@/composables/use-base-table'
-  import HostCreate from '@/pages/cluster-manage/hosts/create.vue'
-  import InstallDependencies from '@/pages/cluster-manage/hosts/install-dependencies.vue'
+
+  import HostCreate from '@/features/create-host/index.vue'
+  import InstallDependencies from '@/features/create-host/install-dependencies.vue'
+  import SvgIcon from '@/components/base/svg-icon/index.vue'
+
   import type { FilterConfirmProps, FilterResetProps } from 'ant-design-vue/es/table/interface'
   import type { GroupItem } from '@/components/common/button-group/types'
   import type { HostVO } from '@/api/hosts/types'
@@ -34,6 +33,7 @@
   import type { HostReq } from '@/api/command/types'
 
   type Key = string | number
+
   interface TableState {
     selectedRowKeys: Key[]
     searchText: string
@@ -43,10 +43,12 @@
   const { t } = useI18n()
   const router = useRouter()
   const attrs = useAttrs() as ClusterVO
+
   const searchInputRef = ref()
   const hostCreateRef = ref<InstanceType<typeof HostCreate> | null>(null)
   const installRef = ref<InstanceType<typeof InstallDependencies> | null>(null)
   const hostStatus = ref(['INSTALLING', 'SUCCESS', 'FAILED', 'UNKNOWN'])
+
   const state = reactive<TableState>({
     searchText: '',
     searchedColumn: '',
@@ -93,18 +95,9 @@
       ellipsis: true,
       filterMultiple: false,
       filters: [
-        {
-          text: t('common.success'),
-          value: 1
-        },
-        {
-          text: t('common.failed'),
-          value: 2
-        },
-        {
-          text: t('common.unknown'),
-          value: 3
-        }
+        { text: t('common.success'), value: 1 },
+        { text: t('common.failed'), value: 2 },
+        { text: t('common.unknown'), value: 3 }
       ]
     },
     {
@@ -121,15 +114,8 @@
   })
 
   const operations = computed((): GroupItem[] => [
-    {
-      text: 'edit',
-      clickEvent: (_item, args) => handleEdit(args)
-    },
-    {
-      text: 'remove',
-      danger: true,
-      clickEvent: (_item, args) => deleteHost([args.id])
-    }
+    { text: 'edit', clickEvent: (_item, args) => handleEdit(args) },
+    { text: 'remove', danger: true, clickEvent: (_item, args) => deleteHost([args.id]) }
   ])
 
   const onFilterDropdownOpenChange = (visible: boolean) => {
@@ -170,7 +156,13 @@
 
   const deleteHost = (ids: number[]) => {
     Modal.confirm({
-      title: ids.length > 1 ? t('common.delete_msgs') : t('common.delete_msg'),
+      title: () =>
+        h('div', { style: { display: 'flex' } }, [
+          h(SvgIcon, { name: 'unknown', style: { width: '24px', height: '24px' } }),
+          h('p', ids.length > 1 ? t('common.delete_msgs') : t('common.delete_msg'))
+        ]),
+      style: { top: '30vh' },
+      icon: null,
       async onOk() {
         try {
           const data = await hostApi.removeHost({ ids })
@@ -232,10 +224,10 @@
 <template>
   <div class="host">
     <header>
-      <div class="header-title">{{ $t('host.host_list') }}</div>
+      <div class="header-title">{{ t('host.host_list') }}</div>
       <a-space :size="16">
-        <a-button type="primary" danger @click="bulkRemove">{{ $t('common.bulk_remove') }}</a-button>
-        <a-button type="primary" @click="addHost">{{ $t('cluster.add_host') }}</a-button>
+        <a-button type="primary" danger @click="bulkRemove">{{ t('common.bulk_remove') }}</a-button>
+        <a-button type="primary" @click="addHost">{{ t('cluster.add_host') }}</a-button>
       </a-space>
     </header>
     <a-table
@@ -250,24 +242,24 @@
         <div class="search">
           <a-input
             ref="searchInputRef"
-            :placeholder="$t('common.enter_error', [column.title])"
+            :placeholder="t('common.enter_error', [column.title])"
             :value="selectedKeys[0]"
             @change="(e: any) => setSelectedKeys(e.target?.value ? [e.target?.value] : [])"
             @press-enter="handleSearch(selectedKeys, confirm, column.dataIndex)"
           />
           <div class="search-option">
             <a-button size="small" @click="handleReset(clearFilters)">
-              {{ $t('common.reset') }}
+              {{ t('common.reset') }}
             </a-button>
             <a-button type="primary" size="small" @click="handleSearch(selectedKeys, confirm, column.dataIndex)">
-              {{ $t('common.search') }}
+              {{ t('common.search') }}
             </a-button>
           </div>
         </div>
       </template>
       <template #customFilterIcon="{ filtered, column }">
-        <svg-icon v-if="column.key != 'status'" :name="filtered ? 'search_activated' : 'search'" />
-        <svg-icon v-else :name="filtered ? 'filter_activated' : 'filter'" />
+        <svg-icon v-if="column.key != 'status'" :name="filtered ? 'search-activated' : 'search'" />
+        <svg-icon v-else :name="filtered ? 'filter-activated' : 'filter'" />
       </template>
       <template #bodyCell="{ record, column }">
         <template v-if="column.key === 'hostname'">
@@ -275,7 +267,7 @@
         </template>
         <template v-if="column.key === 'status'">
           <svg-icon style="margin-left: 0" :name="hostStatus[record.status].toLowerCase()" />
-          <span>{{ $t(`common.${hostStatus[record.status].toLowerCase()}`) }}</span>
+          <span>{{ t(`common.${hostStatus[record.status].toLowerCase()}`) }}</span>
         </template>
         <template v-if="column.key === 'operation'">
           <button-group
@@ -290,7 +282,12 @@
         </template>
       </template>
     </a-table>
-    <host-create ref="hostCreateRef" :api-edit-caller="true" @on-ok="afterSetupHostConfig" />
+    <host-create
+      ref="hostCreateRef"
+      :current-hosts="dataSource"
+      :api-edit-caller="true"
+      @on-ok="afterSetupHostConfig"
+    />
     <install-dependencies ref="installRef" @on-install-success="getHostList(true)" />
   </div>
 </template>

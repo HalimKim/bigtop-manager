@@ -18,15 +18,14 @@
  */
 
 import { notification, Progress, Avatar, Button, Modal } from 'ant-design-vue'
-import { computed, getCurrentInstance, h, reactive, shallowRef } from 'vue'
-import { useI18n } from 'vue-i18n'
-import { defineStore } from 'pinia'
 import { useClusterStore } from '@/store/cluster'
 import { execCommand } from '@/api/command'
 import { getJobDetails } from '@/api/job'
-import SvgIcon from '@/components/common/svg-icon/index.vue'
-import JobModal from '@/components/job-modal/index.vue'
-import type { CommandRequest } from '@/api/command/types'
+
+import SvgIcon from '@/components/base/svg-icon/index.vue'
+import JobModal from '@/features/job-modal/index.vue'
+
+import { type CommandRequest } from '@/api/command/types'
 import type { JobParams, JobVO } from '@/api/job/types'
 
 export type StatusType = 'processing' | 'success' | 'failed' | 'pending'
@@ -39,6 +38,8 @@ export interface JobStageProgressItem extends Partial<CommandRequest> {
   desc: string
   payLoad?: JobVO
 }
+
+type PayLoad = { displayName?: string | string[] } & Record<string, any>
 
 type JobStageProgress = Record<StatusType, () => JobStageProgressItem>
 
@@ -90,12 +91,8 @@ export const useJobProgress = defineStore('job-progress', () => {
   }))
 
   const getClusterDisplayName = (clusterId: number) => {
-    const clusters = clusterStore.clusters
-    const index = clusters.findIndex((v) => v.id == clusterId)
-    if (index != -1) {
-      return clusters[index].displayName
-    }
-    return 'Global'
+    const targetCluster = clusterStore.clusterMap[clusterId]
+    return targetCluster ? targetCluster.displayName : 'Global'
   }
 
   const createStateIcon = (execRes: CommandRes) => {
@@ -244,16 +241,48 @@ export const useJobProgress = defineStore('job-progress', () => {
     }, delay)
   }
 
-  const processCommand = async (params: CommandRequest, nextAction?: (...args: any) => void) => {
-    try {
-      const { id: jobId, name } = await execCommand(params)
-      if (jobId && name) {
-        progressMap.set(jobId, Object.assign(params, jobStageProgress.value.processing()))
-        openNotification({ jobId, clusterId: params.clusterId!, name }, nextAction)
+  /**
+   * Processes a command request by showing a confirmation modal.
+   * @param params command request parameters
+   * @param nextAction callback function to execute after the command is processed
+   * @param payLoad additional payload for the command
+   * @returns void
+   */
+  const processCommand = (params: CommandRequest, nextAction?: (...args: any) => void, payLoad?: PayLoad) => {
+    const { displayName = '', tips } = payLoad as PayLoad
+    const action = t(`common.${params.command.toLowerCase()}`).toLowerCase()
+
+    let title = tips ?? 'common.confirm_action'
+    let target = typeof displayName === 'string' ? displayName : ''
+
+    if (Array.isArray(displayName)) {
+      if (displayName.length > 1) {
+        title = 'common.confirm_comp_action'
+      } else {
+        target = displayName[0]
       }
-    } catch (error) {
-      console.log('error :>> ', error)
     }
+
+    Modal.confirm({
+      title: () =>
+        h('div', { style: { display: 'flex' } }, [
+          h(SvgIcon, { name: 'unknown', style: { width: '24px', height: '24px' } }),
+          h('p', t(`${title}`, target === '' ? { action } : { action, target }))
+        ]),
+      style: { top: '30vh' },
+      icon: null,
+      async onOk() {
+        try {
+          const { id: jobId, name } = await execCommand(params)
+          if (jobId && name) {
+            progressMap.set(jobId, Object.assign(params, jobStageProgress.value.processing()))
+            openNotification({ jobId, clusterId: params.clusterId!, name }, nextAction)
+          }
+        } catch (error) {
+          console.log('error :>> ', error)
+        }
+      }
+    })
   }
 
   const onClick = (execRes: CommandRes) => {
@@ -264,7 +293,7 @@ export const useJobProgress = defineStore('job-progress', () => {
       zIndex: 9999,
       mask: false,
       closable: true,
-      centered: true,
+      style: { top: '30vh' },
       appContext: instance?.appContext,
       content: () => h(JobModal, { execRes, jobInfo: progressMap })
     })

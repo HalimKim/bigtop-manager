@@ -18,17 +18,14 @@
 -->
 
 <script setup lang="ts">
-  import { computed, onActivated, shallowRef, toRefs, useAttrs } from 'vue'
   import { Empty } from 'ant-design-vue'
-  import { usePngImage } from '@/utils/tools'
-  import { useI18n } from 'vue-i18n'
   import { useServiceStore } from '@/store/service'
   import { CommonStatus, CommonStatusTexts } from '@/enums/state'
-  import { useRouter } from 'vue-router'
   import { useJobProgress } from '@/store/job-progress'
-  import FilterForm from '@/components/common/filter-form/index.vue'
+  import { usePngImage } from '@/utils/tools'
+
   import type { GroupItem } from '@/components/common/button-group/types'
-  import type { FilterFormItem } from '@/components/common/filter-form/types'
+  import type { FilterFormItem } from '@/components/common/form-filter/types'
   import type { ServiceListParams, ServiceStatusType, ServiceVO } from '@/api/service/types'
   import type { ClusterVO } from '@/api/cluster/types'
   import type { Command, CommandRequest } from '@/api/command/types'
@@ -41,6 +38,7 @@
   const jobProgressStore = useJobProgress()
   const serviceStore = useServiceStore()
   const { services, loading } = toRefs(serviceStore)
+
   const statusColors = shallowRef<Record<ServiceStatusType, keyof typeof CommonStatusTexts>>({
     1: 'healthy',
     2: 'unhealthy',
@@ -51,29 +49,29 @@
     {
       action: 'Start',
       icon: 'start',
-      clickEvent: (item, args) => {
-        handleServiceOperate(item!.action!, args)
+      clickEvent: (item, payload) => {
+        handleServiceOperate(item!.action!, payload)
       }
     },
     {
       action: 'Stop',
       icon: 'stop',
-      clickEvent: (item, args) => {
-        handleServiceOperate(item!.action!, args)
+      clickEvent: (item, payload) => {
+        handleServiceOperate(item!.action!, payload)
       }
     },
     {
       action: 'Restart',
       icon: 'restart',
-      clickEvent: (item, args) => {
-        handleServiceOperate(item!.action!, args)
+      clickEvent: (item, payload) => {
+        handleServiceOperate(item!.action!, payload)
       }
     },
     {
       action: 'More',
-      icon: 'more_line',
-      clickEvent: (item, args) => {
-        handleServiceOperate(item!.action!, args)
+      icon: 'more-line',
+      clickEvent: (item, payload) => {
+        handleServiceOperate(item!.action!, payload)
       }
     }
   ])
@@ -89,14 +87,8 @@
       key: 'restartFlag',
       label: t('service.required_restart'),
       options: [
-        {
-          label: t('common.required'),
-          value: true
-        },
-        {
-          label: t('common.not_required'),
-          value: false
-        }
+        { label: t('common.required'), value: true },
+        { label: t('common.not_required'), value: false }
       ]
     },
     {
@@ -104,18 +96,9 @@
       key: 'status',
       label: t('common.status'),
       options: [
-        {
-          label: t(`common.${statusColors.value[1]}`),
-          value: 1
-        },
-        {
-          label: t(`common.${statusColors.value[2]}`),
-          value: 2
-        },
-        {
-          label: t(`common.${statusColors.value[3]}`),
-          value: 3
-        }
+        { label: t('common.healthy'), value: 1 },
+        { label: t('common.unhealthy'), value: 2 },
+        { label: t('common.unknown'), value: 3 }
       ]
     }
   ])
@@ -128,7 +111,7 @@
         commandLevel: 'service',
         serviceCommands: [{ serviceName: service.name, installed: true }]
       } as CommandRequest
-      jobProgressStore.processCommand(execCommandParams, getServices)
+      jobProgressStore.processCommand(execCommandParams, getServices, { displayName: service.displayName })
     }
   }
 
@@ -139,7 +122,7 @@
   const viewServiceDetail = (payload: ServiceVO) => {
     router.push({
       name: 'ServiceDetail',
-      params: { service: payload.name, serviceId: payload.id }
+      params: { serviceId: payload.id }
     })
   }
 
@@ -150,7 +133,7 @@
 
 <template>
   <a-spin :spinning="loading" class="service">
-    <filter-form :filter-items="filterFormItems" @filter="getServices" />
+    <form-filter :filter-items="filterFormItems" @filter="getServices" />
     <a-empty v-if="services.length == 0" style="width: 100%" :image="Empty.PRESENTED_IMAGE_SIMPLE" />
     <div v-else class="service-item-wrp">
       <a-card
@@ -171,15 +154,15 @@
               <a-tag :color="CommonStatus[statusColors[item.status]]">
                 <div class="header-base-status-inner">
                   <status-dot :color="CommonStatus[statusColors[item.status]]" />
-                  <span class="small">{{ $t(`common.${statusColors[item.status]}`) }}</span>
+                  <span class="small">{{ t(`common.${statusColors[item.status]}`) }}</span>
                 </div>
               </a-tag>
             </div>
           </div>
           <div class="header-restart-status">
-            <span class="small-gray">{{ `${$t('common.restart')}` }}</span>
-            <status-dot :color="CommonStatus[statusColors[item.status]]" />
-            <span class="small">{{ `${item.restartFlag ? $t('common.required') : $t('common.not_required')}` }}</span>
+            <span class="small-gray">{{ `${t('common.restart')}` }}</span>
+            <status-dot :color="item.restartFlag ? 'error' : 'success'" />
+            <span class="small">{{ `${item.restartFlag ? t('common.required') : t('common.not_required')}` }}</span>
           </div>
         </div>
         <div class="item-content" @click.stop>

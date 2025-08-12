@@ -158,6 +158,7 @@ public class LinuxFileUtils {
      */
     public static void createDirectories(
             String dirPath, String owner, String group, String permissions, boolean recursive) {
+        log.info("Creating directory: [{}]", dirPath);
         if (StringUtils.isBlank(dirPath)) {
             log.error("dirPath must not be null");
             return;
@@ -177,6 +178,7 @@ public class LinuxFileUtils {
         try {
             ShellResult shellResult = sudoExecCmd(builderParameters);
             if (shellResult.getExitCode() != MessageConstants.SUCCESS_CODE) {
+                log.error(shellResult.formatMessage("Failed to create directory"));
                 throw new StackException(shellResult.getErrMsg());
             }
         } catch (IOException e) {

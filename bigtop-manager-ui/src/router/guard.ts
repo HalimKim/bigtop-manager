@@ -20,8 +20,18 @@
 import type { Router } from 'vue-router'
 
 function setCommonGuard(router: Router) {
-  router.beforeEach(async (_to, _from, next) => {
-    next()
+  const token = localStorage.getItem('Token') ?? sessionStorage.getItem('Token') ?? undefined
+
+  router.beforeEach(async (to, _from, next) => {
+    if (!token) {
+      return next()
+    }
+
+    if (to.name === 'Clusters' && token) {
+      return next({ name: 'Default' })
+    }
+
+    return next()
   })
 }
 

@@ -21,9 +21,9 @@ package org.apache.bigtop.manager.server.service.impl;
 import org.apache.bigtop.manager.common.constants.MessageConstants;
 import org.apache.bigtop.manager.common.shell.ShellResult;
 import org.apache.bigtop.manager.common.utils.InstanceUtils;
+import org.apache.bigtop.manager.common.utils.ProjectPathUtils;
 import org.apache.bigtop.manager.dao.po.ComponentPO;
 import org.apache.bigtop.manager.dao.po.HostPO;
-import org.apache.bigtop.manager.dao.po.RepoPO;
 import org.apache.bigtop.manager.dao.query.ComponentQuery;
 import org.apache.bigtop.manager.dao.query.HostQuery;
 import org.apache.bigtop.manager.dao.repository.ComponentDao;
@@ -46,6 +46,9 @@ import org.apache.bigtop.manager.server.service.HostService;
 import org.apache.bigtop.manager.server.utils.PageUtils;
 import org.apache.bigtop.manager.server.utils.RemoteSSHUtils;
 
+import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
+
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 
@@ -55,6 +58,10 @@ import com.github.pagehelper.PageInfo;
 import lombok.extern.slf4j.Slf4j;
 
 import jakarta.annotation.Resource;
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -68,17 +75,21 @@ import java.util.stream.Collectors;
 public class HostServiceImpl implements HostService {
 
     @Resource
-    private RepoDao repoDao;
-
-    @Resource
     private HostDao hostDao;
 
     @Resource
     private ComponentDao componentDao;
 
+    @Resource
+    private RepoDao repoDao;
+
     private final List<InstalledStatusVO> installedStatus = new CopyOnWriteArrayList<>();
 
     private final ExecutorService executorService = Executors.newFixedThreadPool(5);
+
+    private static final Integer DEFAULT_GRPC_PORT = 8835;
+    private static final Integer DEFAULT_SSH_PORT = 22;
+    private static final String DEFAULT_AGENT_DIR = "/opt";
 
     @Override
     public PageVO<HostVO> list(HostQuery hostQuery) {
@@ -95,6 +106,7 @@ public class HostServiceImpl implements HostService {
 
     @Override
     public List<HostVO> add(HostDTO hostDTO) {
+        setDefaultValues(hostDTO);
         List<HostPO> hostPOList = HostConverter.INSTANCE.fromDTO2POListUsingHostnames(hostDTO);
         for (HostPO hostPO : hostPOList) {
             hostPO.setStatus(HealthyStatusEnum.HEALTHY.getCode());
@@ -217,15 +229,11 @@ public class HostServiceImpl implements HostService {
 
     @Override
     public Boolean installDependencies(List<HostDTO> hostDTOList) {
-        List<RepoPO> repoPOList = repoDao.findAll();
-        Map<String, RepoPO> archRepoMap = repoPOList.stream()
-                .filter(repoPO -> repoPO.getType() == 2)
-                .collect(Collectors.toMap(RepoPO::getArch, repo -> repo));
-
         // Clear cache list
         installedStatus.clear();
 
         for (HostDTO hostDTO : hostDTOList) {
+            setDefaultValues(hostDTO);
             for (String hostname : hostDTO.getHostnames()) {
                 InstalledStatusVO installedStatusVO = new InstalledStatusVO();
                 installedStatusVO.setHostname(hostname);
@@ -235,7 +243,7 @@ public class HostServiceImpl implements HostService {
                 // Async install dependencies
                 executorService.submit(() -> {
                     try {
-                        installDependencies(archRepoMap, hostDTO, hostname, installedStatusVO);
+                        installDependencies(hostDTO, hostname, installedStatusVO);
                     } catch (Exception e) {
                         log.error("Unable to install dependencies on host, hostname: {}", hostname, e);
                         installedStatusVO.setStatus(InstalledStatusEnum.FAILED);
@@ -253,71 +261,47 @@ public class HostServiceImpl implements HostService {
         return installedStatus;
     }
 
-    public void installDependencies(
-            Map<String, RepoPO> archRepoMap, HostDTO hostDTO, String hostname, InstalledStatusVO installedStatusVO) {
-        String path = hostDTO.getAgentDir();
-        // Get host arch
-        String arch =
-                execCommandOnRemoteHost(hostDTO, hostname, "arch").getOutput().trim();
-        arch = arch.equals("arm64") ? "aarch64" : arch;
-
-        // Download & Extract agent tarball
-        String repoUrl = archRepoMap.get(arch).getBaseUrl();
-        String tarballUrl = repoUrl + "/bigtop-manager-agent.tar.gz";
-        String command = "sudo mkdir -p " + path + " &&"
-                + " sudo chown -R " + hostDTO.getSshUser() + ":" + hostDTO.getSshUser() + " " + path
-                + " && curl -L " + tarballUrl + " | tar -xz -C " + path;
-        ShellResult result = execCommandOnRemoteHost(hostDTO, hostname, command);
-        if (result.getExitCode() != MessageConstants.SUCCESS_CODE) {
-            log.error(
-                    "Unable to download & extract agent tarball, hostname: {}, msg: {}", hostname, result.getErrMsg());
-
-            installedStatusVO.setStatus(InstalledStatusEnum.FAILED);
-            installedStatusVO.setMessage(result.getErrMsg());
-            return;
+    @Override
+    public Boolean checkDuplicate(HostDTO hostDTO) {
+        List<HostPO> existsHostList = hostDao.findAllByHostnames(hostDTO.getHostnames());
+        if (CollectionUtils.isNotEmpty(existsHostList)) {
+            List<String> existsHostnames =
+                    existsHostList.stream().map(HostPO::getHostname).toList();
+            throw new ApiException(ApiExceptionEnum.HOST_ASSIGNED, String.join(",", existsHostnames));
         }
+        return true;
+    }
 
-        // Update agent conf
-        // Current only grpc port needs to be updated if it's not default port
-        if (hostDTO.getGrpcPort() != 8835) {
-            command = "sed -i 's/port: 8835/port: " + hostDTO.getGrpcPort() + "/' " + path
-                    + "/bigtop-manager-agent/conf/application.yml";
-            result = execCommandOnRemoteHost(hostDTO, hostname, command);
+    public void installDependencies(HostDTO hostDTO, String hostname, InstalledStatusVO installedStatusVO) {
+        String path = hostDTO.getAgentDir();
+        String repoUrl = repoDao.findByName("agent").getBaseUrl();
+        int grpcPort = hostDTO.getGrpcPort();
+
+        String command;
+        try {
+            String script = ProjectPathUtils.getServerScriptPath() + File.separator + "setup-agent.sh";
+            String content = Files.readString(Path.of(script));
+            command = "cat << 'EOF' > ./setup-agent.sh\n" + content + "\nEOF\n" + "chmod +x ./setup-agent.sh";
+            ShellResult result = execCommandOnRemoteHost(hostDTO, hostname, command);
             if (result.getExitCode() != MessageConstants.SUCCESS_CODE) {
-                log.error("Unable to update agent config, hostname: {}, msg: {}", hostname, result.getErrMsg());
-
+                log.error("Unable to write agent script, hostname: {}, msg: {}", hostname, result);
                 installedStatusVO.setStatus(InstalledStatusEnum.FAILED);
                 installedStatusVO.setMessage(result.getErrMsg());
                 return;
             }
-        }
-
-        // Run agent in background
-        command = "nohup " + path + "/bigtop-manager-agent/bin/start.sh --debug > /dev/null 2>&1 &";
-        result = execCommandOnRemoteHost(hostDTO, hostname, command);
-        if (result.getExitCode() != MessageConstants.SUCCESS_CODE) {
-            log.error("Unable to start agent, hostname: {}, msg: {}", hostname, result.getErrMsg());
-
+        } catch (IOException e) {
+            log.error("Unable to write agent script, hostname: {}, msg: {}", hostname, e.getMessage());
             installedStatusVO.setStatus(InstalledStatusEnum.FAILED);
-            installedStatusVO.setMessage(result.getErrMsg());
+            installedStatusVO.setMessage(e.getMessage());
             return;
         }
 
-        // Check the process, the agent may encounter some errors and exit when starting
-        // So we need to wait for a while before the check
-        try {
-            Thread.sleep(10 * 1000);
-        } catch (InterruptedException e) {
-            log.error("Thread sleep interrupted", e);
-        }
-        command = "ps -ef | grep bigtop-manager-agent | grep -v grep";
-        result = execCommandOnRemoteHost(hostDTO, hostname, command);
-        if (result.getExitCode() != MessageConstants.SUCCESS_CODE
-                || !result.getOutput().contains("bigtop-manager-agent")) {
-            log.error("Unable to start agent process, hostname: {}", hostname);
-
+        command = "./setup-agent.sh " + path + " " + repoUrl + " " + grpcPort;
+        ShellResult result = execCommandOnRemoteHost(hostDTO, hostname, command);
+        if (result.getExitCode() != MessageConstants.SUCCESS_CODE) {
+            log.error("Unable to setup agent, hostname: {}, msg: {}", hostname, result);
             installedStatusVO.setStatus(InstalledStatusEnum.FAILED);
-            installedStatusVO.setMessage("Unable to start agent, please check the log.");
+            installedStatusVO.setMessage(result.getErrMsg());
             return;
         }
 
@@ -344,6 +328,21 @@ public class HostServiceImpl implements HostService {
         } catch (Exception e) {
             log.error("Unable to exec command on host, hostname: {}, command: {}", hostname, command, e);
             throw new RuntimeException(e);
+        }
+    }
+
+    private void setDefaultValues(HostDTO hostDTO) {
+        if (hostDTO == null) {
+            return;
+        }
+        if (hostDTO.getGrpcPort() == null) {
+            hostDTO.setGrpcPort(DEFAULT_GRPC_PORT);
+        }
+        if (hostDTO.getSshPort() == null) {
+            hostDTO.setSshPort(DEFAULT_SSH_PORT);
+        }
+        if (StringUtils.isBlank(hostDTO.getAgentDir())) {
+            hostDTO.setAgentDir(DEFAULT_AGENT_DIR);
         }
     }
 }

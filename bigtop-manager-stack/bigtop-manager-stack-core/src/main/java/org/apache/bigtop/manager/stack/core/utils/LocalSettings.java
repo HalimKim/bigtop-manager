@@ -21,8 +21,10 @@ package org.apache.bigtop.manager.stack.core.utils;
 import org.apache.bigtop.manager.common.constants.CacheFiles;
 import org.apache.bigtop.manager.common.utils.JsonUtils;
 import org.apache.bigtop.manager.common.utils.ProjectPathUtils;
+import org.apache.bigtop.manager.common.utils.os.OSDetection;
 import org.apache.bigtop.manager.grpc.pojo.ClusterInfo;
 import org.apache.bigtop.manager.grpc.pojo.RepoInfo;
+import org.apache.bigtop.manager.stack.core.exception.StackException;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import lombok.extern.slf4j.Slf4j;
@@ -41,7 +43,6 @@ public class LocalSettings {
     }
 
     public static Map<String, Object> configurations(String service, String type) {
-
         Map<String, Object> configDataMap = new HashMap<>();
         File file = createFile(ProjectPathUtils.getAgentCachePath() + CacheFiles.CONFIGURATIONS_INFO);
         try {
@@ -65,7 +66,6 @@ public class LocalSettings {
     }
 
     public static Map<String, List<String>> hosts() {
-
         Map<String, List<String>> hostJson = new HashMap<>();
         File file = createFile(ProjectPathUtils.getAgentCachePath() + CacheFiles.HOSTS_INFO);
         if (file.exists()) {
@@ -75,7 +75,6 @@ public class LocalSettings {
     }
 
     public static Map<String, Object> basicInfo() {
-
         Map<String, Object> settings = new HashMap<>();
         File file = createFile(ProjectPathUtils.getAgentCachePath() + CacheFiles.SETTINGS_INFO);
         if (file.exists()) {
@@ -85,7 +84,6 @@ public class LocalSettings {
     }
 
     public static Map<String, String> users() {
-
         Map<String, String> userMap = new HashMap<>();
         File file = createFile(ProjectPathUtils.getAgentCachePath() + CacheFiles.USERS_INFO);
         if (file.exists()) {
@@ -98,8 +96,19 @@ public class LocalSettings {
         return List.of();
     }
 
-    public static List<RepoInfo> repos() {
+    public static RepoInfo repo(String name) {
+        String arch = OSDetection.getArch();
+        List<RepoInfo> repoInfoList = repos();
+        for (RepoInfo repoInfo : repoInfoList) {
+            if (repoInfo.getName().equals(name) && repoInfo.getArch().contains(arch)) {
+                return repoInfo;
+            }
+        }
+        log.error("Cannot find repo: [{}], arch: [{}]", name, arch);
+        throw new StackException("Repo not found: " + name);
+    }
 
+    public static List<RepoInfo> repos() {
         List<RepoInfo> repoInfoList = List.of();
         File file = createFile(ProjectPathUtils.getAgentCachePath() + CacheFiles.REPOS_INFO);
         if (file.exists()) {
@@ -109,7 +118,6 @@ public class LocalSettings {
     }
 
     public static ClusterInfo cluster() {
-
         ClusterInfo clusterInfo = new ClusterInfo();
         File file = createFile(ProjectPathUtils.getAgentCachePath() + CacheFiles.CLUSTER_INFO);
         if (file.exists()) {

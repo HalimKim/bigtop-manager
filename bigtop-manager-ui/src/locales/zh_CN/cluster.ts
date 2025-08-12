@@ -26,7 +26,7 @@ export default {
   name: '集群名',
   display_name: '集群显示名',
   description: '集群描述',
-  root_directory: '集群根目录',
+  root_dir: '集群根目录',
   user_group: '集群用户组',
   config_source: '配置源',
   install_dependencies: '安装依赖',
@@ -35,5 +35,9 @@ export default {
   view_log: '查看日志',
   source: '配置源',
   show_hosts_resolved: '解析后的主机名列表',
-  cluster_unavailable_message: '抱歉，你还没有集群，无法使用集群管理能力。'
+  duplicate_hostname: '有 {0} 个主机名重复，请选择处理方式',
+  exist_duplicate_hostname: '主机名重复，请选择处理方式',
+  cluster_unavailable_message: '抱歉，你还没有集群，无法使用集群管理能力。',
+  keep: '保留',
+  override: '覆盖'
 }

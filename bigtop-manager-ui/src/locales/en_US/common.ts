@@ -55,7 +55,6 @@ export default {
   desc: 'Description',
   os: 'OS',
   arch: 'Arch',
-  base_url: 'Address',
   cluster: 'Cluster',
   host: 'Host',
   service: 'Service',
@@ -101,7 +100,6 @@ export default {
   restore_msg: 'Are you sure you want to restore this?',
   delete_empty: 'Please select the records you want to delete.',
   total: 'Total {0} items',
-  note: 'Note: Changes to the source address will take effect for all clusters.',
   upload_file: 'Upload file',
   file_type_error: 'Only text files are allowed!',
   file_size_error: 'File size cannot exceed 10KB!',
@@ -125,5 +123,9 @@ export default {
   disabled: 'Disabled',
   restore: 'Restore',
   selected: 'Selected',
-  feature_not_supported: 'Feature not supported yet'
+  feature_not_supported: 'Feature not supported yet',
+  installing_exit_confirm_content:
+    'Installation is in progress, exiting the page will cause the installation to fail. Are you sure you want to exit?',
+  confirm_action: 'Are you sure you want to {action} {target} ?',
+  confirm_comp_action: 'Are you sure you want to {action} selected components ?'
 }

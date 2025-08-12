@@ -19,6 +19,7 @@
 package org.apache.bigtop.manager.stack.infra.v1_0_0.mysql;
 
 import org.apache.bigtop.manager.grpc.payload.ComponentCommandPayload;
+import org.apache.bigtop.manager.grpc.pojo.RepoInfo;
 import org.apache.bigtop.manager.stack.core.annotations.GlobalParams;
 import org.apache.bigtop.manager.stack.core.spi.param.Params;
 import org.apache.bigtop.manager.stack.core.utils.LocalSettings;
@@ -37,8 +38,9 @@ import java.util.Map;
 @NoArgsConstructor
 public class MySQLParams extends InfraParams {
 
-    private String mysqlLogDir = "/var/log/mysql";
-    private String mysqlPidDir = "/var/run/mysql";
+    private String mysqlLogDir;
+    private String mysqlPidDir;
+    private String mysqlDataDir;
 
     private String rootPassword;
     private String myCnfContent;
@@ -54,6 +56,16 @@ public class MySQLParams extends InfraParams {
         common();
     }
 
+    @Override
+    public void initGlobalParams() {
+        super.initGlobalParams();
+
+        Map<String, Object> map = getGlobalParamsMap();
+        mysqlPidDir = map.get("mysql_pid_dir").toString();
+        mysqlLogDir = map.get("mysql_log_dir").toString();
+        mysqlDataDir = map.get("mysql_data_dir").toString();
+    }
+
     public Map<String, Object> common() {
         Map<String, Object> common = LocalSettings.configurations(getServiceName(), "common");
         rootPassword = common.get("root_password").toString();
@@ -63,10 +75,13 @@ public class MySQLParams extends InfraParams {
     @GlobalParams
     public Map<String, Object> myCnf() {
         Map<String, Object> myCnf = LocalSettings.configurations(getServiceName(), "my.cnf");
-        mysqlPidDir = myCnf.get("mysql_pid_dir").toString();
-        mysqlLogDir = myCnf.get("mysql_log_dir").toString();
         myCnfContent = myCnf.get("content").toString();
         return myCnf;
+    }
+
+    @Override
+    public RepoInfo repo() {
+        return LocalSettings.repo("mysql");
     }
 
     @Override

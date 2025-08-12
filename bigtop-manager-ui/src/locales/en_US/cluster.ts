@@ -27,14 +27,18 @@ export default {
   name: 'Name',
   display_name: 'Display Name',
   description: 'Description',
-  root_directory: 'Root Directory',
+  root_dir: 'Root Dir',
   user_group: 'User Group',
-  config_source: 'Configuration Source',
+  config_source: 'Repository',
   install_dependencies: 'Install Dependencies',
   add_host: 'Add Host',
   edit_host: 'Edit Host',
   view_log: 'View Log',
-  source: 'Source',
+  source: 'Repository',
   show_hosts_resolved: 'Resolved Hostnames',
-  cluster_unavailable_message: 'Sorry, you need to create cluster to use this feature.'
+  duplicate_hostname: '{0} host name(s) are duplicated. Please choose how to handle them.',
+  exist_duplicate_hostname: 'Duplicate host name found. Choose an action.',
+  cluster_unavailable_message: 'Sorry, you need to create cluster to use this feature.',
+  keep: 'keep',
+  override: 'override'
 }

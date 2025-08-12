@@ -17,13 +17,12 @@
   ~ under the License.
 -->
 <script setup lang="ts">
-  import { ref, reactive, computed, onMounted, watchEffect } from 'vue'
-  import useBaseTable from '@/composables/use-base-table'
-  import type { TableColumnType } from 'ant-design-vue'
-  import { useI18n } from 'vue-i18n'
   import { useStackStore } from '@/store/stack'
-  import { storeToRefs } from 'pinia'
-  import { ServiceVO } from '@/api/service/types'
+
+  import SetSource from '@/features/set-source/index.vue'
+
+  import type { ServiceVO } from '@/api/service/types'
+  import type { TableColumnType } from 'ant-design-vue'
 
   const { t } = useI18n()
   const stackStore = useStackStore()
@@ -34,10 +33,13 @@
     stackSelected: 'Bigtop',
     stackGroup: ['Bigtop', 'Infra', 'Extra']
   })
+
+  const data = ref<ServiceVO[]>([])
+  const setSourceRef = ref<InstanceType<typeof SetSource>>()
+
   const currentStack = computed(() =>
     stacks.value.find((stack) => stack.stackName.toUpperCase() === store.stackSelected.toUpperCase())
   )
-  const data = ref<ServiceVO[]>([])
   const columns = computed((): TableColumnType[] => [
     {
       title: '#',
@@ -84,7 +86,7 @@
   })
 
   const handleSetSource = () => {
-    // setSourceRef.value?.handleOpen()
+    setSourceRef.value?.handleOpen()
   }
 
   onMounted(() => {
@@ -95,13 +97,13 @@
 <template>
   <div class="cluster-components">
     <div>
-      <div class="menu-title">{{ $t('menu.component') }}</div>
+      <div class="menu-title">{{ t('menu.stacks') }}</div>
     </div>
     <div class="cluster-components-header">
       <a-radio-group v-model:value="store.stackSelected" button-style="solid">
         <a-radio-button v-for="(stack, idx) in store.stackGroup" :key="idx" :value="stack">{{ stack }}</a-radio-button>
       </a-radio-group>
-      <a-button type="primary" @click="handleSetSource">{{ $t('cluster.config_source') }}</a-button>
+      <a-button type="primary" @click="handleSetSource">{{ t('cluster.config_source') }}</a-button>
     </div>
     <div>
       <a-table
@@ -118,6 +120,7 @@
         </template>
       </a-table>
     </div>
+    <set-source ref="setSourceRef" />
   </div>
 </template>
 

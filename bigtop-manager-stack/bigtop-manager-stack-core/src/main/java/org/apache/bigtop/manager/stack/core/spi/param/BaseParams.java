@@ -26,10 +26,8 @@ import org.apache.bigtop.manager.grpc.pojo.PackageSpecificInfo;
 import org.apache.bigtop.manager.grpc.pojo.RepoInfo;
 import org.apache.bigtop.manager.grpc.pojo.TemplateInfo;
 import org.apache.bigtop.manager.stack.core.annotations.GlobalParams;
-import org.apache.bigtop.manager.stack.core.exception.StackException;
 import org.apache.bigtop.manager.stack.core.utils.LocalSettings;
 
-import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -44,17 +42,49 @@ import java.util.Map;
 @NoArgsConstructor
 public abstract class BaseParams implements Params {
 
-    @Getter
     protected final Map<String, Object> globalParamsMap = new HashMap<>();
+
+    private boolean globalParamsResolved = false;
+
+    private static int CURRENT_RESOLVING_DEPTH = 0;
+    private static final int MAX_RECURSION_DEPTH = 5;
 
     public static final String LIMITS_CONF_DIR = "/etc/security/limits.d";
 
     protected ComponentCommandPayload payload;
 
-    @SuppressWarnings("unchecked")
     protected BaseParams(ComponentCommandPayload payload) {
         this.payload = payload;
+    }
 
+    public void putGlobalParam(String key, Object value) {
+        if (value instanceof String s) {
+            if (s.contains("${") && s.contains("}")) {
+                globalParamsResolved = false;
+            }
+        }
+
+        globalParamsMap.put(key, value);
+    }
+
+    public Object getGlobalParam(String key) {
+        if (!globalParamsResolved) {
+            recursivelyResolveGlobalParams();
+        }
+
+        return globalParamsMap.get(key);
+    }
+
+    public Map<String, Object> getGlobalParamsMap() {
+        if (!globalParamsResolved) {
+            recursivelyResolveGlobalParams();
+        }
+
+        return globalParamsMap;
+    }
+
+    @SuppressWarnings("unchecked")
+    public void initGlobalParams() {
         // Global Parameters Injection
         Method[] declaredMethods = this.getClass().getDeclaredMethods();
         for (Method declaredMethod : declaredMethods) {
@@ -67,7 +97,54 @@ public abstract class BaseParams implements Params {
                 log.warn("Get {} Params error", declaredMethod, e);
             }
         }
+
         globalParamsMap.remove("content");
+
+        recursivelyResolveGlobalParams();
+        globalParamsResolved = true;
+    }
+
+    private void recursivelyResolveGlobalParams() {
+        CURRENT_RESOLVING_DEPTH++;
+        boolean allResolved = true;
+        for (Map.Entry<String, Object> entry : globalParamsMap.entrySet()) {
+            if (entry.getValue() instanceof String value) {
+                while (value.contains("${") && value.contains("}")) {
+                    allResolved = false;
+                    int start = -1, end = -1;
+                    for (int i = 0; i < value.length(); i++) {
+                        if (value.startsWith("${", i)) {
+                            start = i;
+                        } else if (value.charAt(i) == '}') {
+                            end = i;
+                            break;
+                        }
+                    }
+                    if (start != -1 && end != -1) {
+                        String key = value.substring(start + 2, end);
+                        Object resolvedValue = globalParamsMap.get(key);
+                        if (resolvedValue != null) {
+                            value = value.substring(0, start) + resolvedValue + value.substring(end + 1);
+                            entry.setValue(value);
+                        } else {
+                            // Log a warning if the key is not found
+                            log.warn("Parameter '{}' not found for replacement in '{}'", key, entry.getKey());
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        if (!allResolved) {
+            if (CURRENT_RESOLVING_DEPTH >= MAX_RECURSION_DEPTH) {
+                CURRENT_RESOLVING_DEPTH = 0;
+            } else {
+                recursivelyResolveGlobalParams();
+            }
+        } else {
+            CURRENT_RESOLVING_DEPTH = 0;
+        }
     }
 
     public String hostname() {
@@ -94,20 +171,14 @@ public abstract class BaseParams implements Params {
 
     @Override
     public RepoInfo repo() {
-        return LocalSettings.repos().stream()
-                // Use service tarballs repo(type == 1)
-                .filter(r -> OSDetection.getArch().equals(r.getArch()) && r.getType() == 1)
-                .findFirst()
-                .orElseThrow(() -> new StackException(
-                        "Cannot find repo for os: [{0}] and arch: [{1}]", OSDetection.getOS(), OSDetection.getArch()));
+        return LocalSettings.repo("general");
     }
 
     @Override
     public List<PackageInfo> packages() {
-        RepoInfo repo = this.repo();
         List<PackageInfo> packageInfoList = new ArrayList<>();
         for (PackageSpecificInfo packageSpecificInfo : this.payload.getPackageSpecifics()) {
-            if (!packageSpecificInfo.getArch().contains(repo.getArch())) {
+            if (!packageSpecificInfo.getArch().contains(OSDetection.getArch())) {
                 continue;
             }
 
@@ -125,7 +196,7 @@ public abstract class BaseParams implements Params {
     @Override
     public String javaHome() {
         String root = LocalSettings.cluster().getRootDir();
-        return MessageFormat.format("{0}/tools/jdk", root);
+        return MessageFormat.format("{0}/dependencies/jdk", root);
     }
 
     @Override

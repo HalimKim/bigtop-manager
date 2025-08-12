@@ -18,14 +18,16 @@
 -->
 
 <script setup lang="ts">
-  import { onMounted, ref } from 'vue'
   import { storeToRefs } from 'pinia'
   import { useLlmConfigStore } from '@/store/llm-config/index'
   import { message, Modal } from 'ant-design-vue'
   import { useI18n } from 'vue-i18n'
   import LlmItem, { type ActionKeys, type ExtraItem } from './components/llm-item.vue'
-  import type { AuthorizedPlatform } from '@/api/llm-config/types'
+
   import addLlmItem from './components/add-llm-item.vue'
+  import SvgIcon from '@/components/base/svg-icon/index.vue'
+
+  import type { AuthorizedPlatform } from '@/api/llm-config/types'
 
   const { t } = useI18n()
   const llmConfigStore = useLlmConfigStore()
@@ -70,7 +72,13 @@
 
   const handleDeleteLlmConfig = (authId: string | number) => {
     Modal.confirm({
-      title: t('common.delete_msg'),
+      title: () =>
+        h('div', { style: { display: 'flex' } }, [
+          h(SvgIcon, { name: 'unknown', style: { width: '24px', height: '24px' } }),
+          h('p', t('common.delete_msg'))
+        ]),
+      icon: null,
+      style: { top: '30vh' },
       async onOk() {
         const success = await llmConfigStore.deleteAuthPlatform(authId)
         if (success) {
@@ -90,7 +98,7 @@
   <a-spin :spinning="loading">
     <div class="llm-config">
       <a-typography-title :level="5">
-        {{ $t('menu.llm_config') }}
+        {{ t('menu.llm_config') }}
       </a-typography-title>
       <div class="llm-config-content">
         <llm-item

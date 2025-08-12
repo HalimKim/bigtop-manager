@@ -43,8 +43,16 @@ public class ProjectPathUtils {
         return getProjectResourcesDir() + File.separator + "stacks";
     }
 
+    public static String getServerScriptPath() {
+        return getProjectResourcesDir() + File.separator + "scripts";
+    }
+
     public static String getAgentCachePath() {
         return getProjectStoreDir() + File.separator + "agent-caches";
+    }
+
+    public static String getPromptsPath() {
+        return getProjectResourcesDir() + File.separator + "prompts";
     }
 
     private static String getProjectResourcesDir() {

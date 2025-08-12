@@ -162,6 +162,8 @@ public class JobCacheHelper {
             repoInfo.setName(repoPO.getName());
             repoInfo.setArch(repoPO.getArch());
             repoInfo.setBaseUrl(repoPO.getBaseUrl());
+            repoInfo.setPkgName(repoPO.getPkgName());
+            repoInfo.setChecksum(repoPO.getChecksum());
             repoInfo.setType(repoPO.getType());
             repoList.add(repoInfo);
         });
@@ -216,5 +218,10 @@ public class JobCacheHelper {
         });
 
         return hostMap;
+    }
+
+    private static Boolean hostRequiresAllData(String hostname) {
+        // Some services like prometheus requires all clusters info to collect metrics.
+        return false;
     }
 }
