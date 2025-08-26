@@ -16,14 +16,10 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.apache.bigtop.manager.server.model.req;
 
-import lombok.Data;
+import { generateMetaMap } from '../plugins/unplugin-image-manifest/generate'
 
-@Data
-public class AttrsReq {
-
-    private Boolean required;
-
-    private String type;
-}
+generateMetaMap().catch((err) => {
+  console.error(err)
+  process.exit(1)
+})
