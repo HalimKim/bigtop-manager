@@ -16,14 +16,15 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.apache.bigtop.manager.server.model.req;
+package org.apache.bigtop.manager.common.constants;
 
-import lombok.Data;
+public class Caches {
 
-@Data
-public class AttrsReq {
+    public static final String CACHE_NONCE = "auth:nonce";
 
-    private Boolean required;
+    public static final int NONCE_EXPIRE_TIME_MINUTES = 5;
 
-    private String type;
+    public static final String CACHE_USER = "auth:user";
+
+    public static final int USER_EXPIRE_TIME_DAYS = 1;
 }
